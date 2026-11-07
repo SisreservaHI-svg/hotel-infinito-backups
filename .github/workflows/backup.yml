@@ -1,0 +1,46 @@
+
+name: Respaldo Hotel Infinito
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: '0 6 * * *'
+
+permissions:
+  contents: read
+
+jobs:
+  backup:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Instalar PostgreSQL 17
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y postgresql-common
+          sudo /usr/share/postgresql-common/pgdg/apt.postgresql.org.sh -y
+          sudo apt-get install -y postgresql-client-17
+
+      - name: Crear respaldo
+        env:
+          SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
+        run: |
+          set -euo pipefail
+          mkdir -p respaldo
+          /usr/lib/postgresql/17/bin/pg_dump \
+            --dbname="$SUPABASE_DB_URL" \
+            --format=custom \
+            --no-owner \
+            --no-acl \
+            --schema=public \
+            --file="respaldo/hotel-infinito.dump"
+          test -s respaldo/hotel-infinito.dump
+
+      - name: Guardar respaldo privado
+        uses: actions/upload-artifact@v4
+        with:
+          name: respaldo-${{ github.run_id }}
+          path: respaldo/hotel-infinito.dump
+          retention-days: 30
+          if-no-files-found: error
