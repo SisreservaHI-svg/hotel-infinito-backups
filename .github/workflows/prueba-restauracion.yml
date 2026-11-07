@@ -133,3 +133,31 @@ jobs:
           SQL
 
           echo "Restauracion estructural completada"
+
+      - name: Comparar cantidad de reservas
+        env:
+          SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
+          PGPASSWORD: prueba_temporal
+        run: |
+          set -euo pipefail
+
+          ORIGINAL=$(psql "$SUPABASE_DB_URL" \
+            -X -A -t -v ON_ERROR_STOP=1 \
+            -c "SELECT COUNT(*) FROM public.reservas;")
+
+          RESTAURADO=$(psql \
+            -h localhost \
+            -U postgres \
+            -d hotel_prueba \
+            -X -A -t -v ON_ERROR_STOP=1 \
+            -c "SELECT COUNT(*) FROM public.reservas;")
+
+          echo "Reservas originales: $ORIGINAL"
+          echo "Reservas restauradas: $RESTAURADO"
+
+          if [ "$ORIGINAL" != "$RESTAURADO" ]; then
+            echo "ERROR: La cantidad de reservas no coincide."
+            exit 1
+          fi
+
+          echo "CORRECTO: La cantidad de reservas coincide."
