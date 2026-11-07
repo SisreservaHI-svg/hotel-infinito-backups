@@ -76,6 +76,14 @@ jobs:
             -v ON_ERROR_STOP=1 \
             -c "DROP SCHEMA IF EXISTS public CASCADE;"
 
+      - name: Crear rol de autenticacion temporal
+        env:
+          PGPASSWORD: prueba_temporal
+        run: |
+          psql -h localhost -U postgres -d hotel_prueba \
+            -v ON_ERROR_STOP=1 \
+            -c "CREATE ROLE authenticated NOLOGIN;"
+
       - name: Restaurar en base temporal
         env:
           PGPASSWORD: prueba_temporal
