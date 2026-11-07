@@ -1,0 +1,119 @@
+
+name: Prueba Restauracion Hotel Infinito
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  probar-restauracion:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: prueba_temporal
+          POSTGRES_DB: hotel_prueba
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    steps:
+      - name: Instalar herramientas PostgreSQL
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y postgresql-common
+          sudo /usr/share/postgresql-common/pgdg/apt.postgresql.org.sh -y
+          sudo apt-get install -y postgresql-client-17
+
+      - name: Generar copia para la prueba
+        env:
+          SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
+        run: |
+          set -euo pipefail
+          test -n "$SUPABASE_DB_URL"
+          /usr/lib/postgresql/17/bin/pg_dump \
+            --dbname="$SUPABASE_DB_URL" \
+            --format=custom \
+            --no-owner \
+            --no-acl \
+            --schema=public \
+            --file=/tmp/hotel-prueba.dump
+
+      - name: Preparar dependencias de Supabase
+        env:
+          PGPASSWORD: prueba_temporal
+        run: |
+          psql -h localhost -U postgres -d hotel_prueba \
+            -v ON_ERROR_STOP=1 <<'SQL'
+          CREATE SCHEMA IF NOT EXISTS auth;
+          CREATE FUNCTION auth.uid()
+          RETURNS uuid
+          LANGUAGE sql STABLE
+          AS $$
+            SELECT NULLIF(
+              current_setting(
+                'request.jwt.claim.sub', true
+              ), ''
+            )::uuid;
+          $$;
+          SQL
+
+      - name: Restaurar en base temporal
+        env:
+          PGPASSWORD: prueba_temporal
+        run: |
+          set -euo pipefail
+          /usr/lib/postgresql/17/bin/pg_restore \
+            --host=localhost \
+            --username=postgres \
+            --dbname=hotel_prueba \
+            --no-owner \
+            --no-acl \
+            --exit-on-error \
+            /tmp/hotel-prueba.dump
+
+      - name: Comprobar restauracion
+        env:
+          PGPASSWORD: prueba_temporal
+        run: |
+          set -euo pipefail
+          psql -h localhost -U postgres -d hotel_prueba \
+            -v ON_ERROR_STOP=1 <<'SQL'
+          DO $$
+          BEGIN
+            IF to_regclass('public.reservas') IS NULL
+            THEN
+              RAISE EXCEPTION 'Falta tabla reservas';
+            END IF;
+
+            IF NOT (
+              SELECT relrowsecurity
+              FROM pg_class
+              WHERE oid = 'public.reservas'::regclass
+            ) THEN
+              RAISE EXCEPTION 'RLS no esta activado';
+            END IF;
+
+            IF (
+              SELECT count(*)
+              FROM pg_policies
+              WHERE schemaname = 'public'
+                AND tablename = 'reservas'
+            ) <> 4 THEN
+              RAISE EXCEPTION 'No hay 4 politicas RLS';
+            END IF;
+          END
+          $$;
+          SQL
+
+          echo "Restauracion estructural completada"
