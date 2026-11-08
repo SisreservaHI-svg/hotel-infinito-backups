@@ -35,19 +35,22 @@ jobs:
           sudo /usr/share/postgresql-common/pgdg/apt.postgresql.org.sh -y
           sudo apt-get install -y postgresql-client-17
 
-      - name: Generar copia para la prueba
-        env:
-          SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
+     
+      - name: Descargar respaldo original
+        uses: actions/download-artifact@v4
+        with:
+          name: respaldo-42456072228
+          path: /tmp/respaldo-original
+          run-id: 42456072228
+          github-token: ${{ github.token }}
+
+      - name: Preparar archivo para restauracion
         run: |
           set -euo pipefail
-          test -n "$SUPABASE_DB_URL"
-          /usr/lib/postgresql/17/bin/pg_dump \
-            --dbname="$SUPABASE_DB_URL" \
-            --format=custom \
-            --no-owner \
-            --no-acl \
-            --schema=public \
-            --file=/tmp/hotel-prueba.dump
+          test -s /tmp/respaldo-original/hotel-infinito.dump
+          cp /tmp/respaldo-original/hotel-infinito.dump \
+            /tmp/hotel-prueba.dump
+          echo "Respaldo original descargado correctamente"
 
       - name: Preparar dependencias de Supabase
         env:
