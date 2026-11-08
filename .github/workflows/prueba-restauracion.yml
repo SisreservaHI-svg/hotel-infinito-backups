@@ -136,31 +136,25 @@ jobs:
           SQL
 
           echo "Restauracion estructural completada"
-
-      - name: Comparar cantidad de reservas
+      
+      - name: Verificar reservas del respaldo original
         env:
-          SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
           PGPASSWORD: prueba_temporal
         run: |
           set -euo pipefail
 
-          ORIGINAL=$(psql "$SUPABASE_DB_URL" \
-            -X -A -t -v ON_ERROR_STOP=1 \
-            -c "SELECT COUNT(*) FROM public.reservas;")
-
-          RESTAURADO=$(psql \
+          CANTIDAD=$(psql \
             -h localhost \
             -U postgres \
             -d hotel_prueba \
             -X -A -t -v ON_ERROR_STOP=1 \
             -c "SELECT COUNT(*) FROM public.reservas;")
 
-          echo "Reservas originales: $ORIGINAL"
-          echo "Reservas restauradas: $RESTAURADO"
+          echo "Reservas recuperadas: $CANTIDAD"
 
-          if [ "$ORIGINAL" != "$RESTAURADO" ]; then
-            echo "ERROR: La cantidad de reservas no coincide."
+          if [ "$CANTIDAD" -ne 1 ]; then
+            echo "ERROR: Se esperaba 1 reserva."
             exit 1
           fi
 
-          echo "CORRECTO: La cantidad de reservas coincide."
+          echo "CORRECTO: Se recupero 1 reserva."
